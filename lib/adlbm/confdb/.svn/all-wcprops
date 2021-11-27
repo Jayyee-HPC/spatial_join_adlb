@@ -1,0 +1,29 @@
+K 25
+svn:wc:ra_dav:version-url
+V 36
+/svn/adlbm/!svn/ver/321/trunk/confdb
+END
+aclocal_f77.m4
+K 25
+svn:wc:ra_dav:version-url
+V 51
+/svn/adlbm/!svn/ver/321/trunk/confdb/aclocal_f77.m4
+END
+aclocal_mpi.m4
+K 25
+svn:wc:ra_dav:version-url
+V 51
+/svn/adlbm/!svn/ver/321/trunk/confdb/aclocal_mpi.m4
+END
+aclocal_core.m4
+K 25
+svn:wc:ra_dav:version-url
+V 52
+/svn/adlbm/!svn/ver/321/trunk/confdb/aclocal_core.m4
+END
+aclocal_make.m4
+K 25
+svn:wc:ra_dav:version-url
+V 52
+/svn/adlbm/!svn/ver/321/trunk/confdb/aclocal_make.m4
+END

@@ -1,0 +1,9 @@
+K 10
+svn:ignore
+V 41
+old*
+autom4te.cache
+Makefile
+adlb_conf.h
+
+END

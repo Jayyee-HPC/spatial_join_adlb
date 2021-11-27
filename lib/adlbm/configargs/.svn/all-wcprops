@@ -1,0 +1,29 @@
+K 25
+svn:wc:ra_dav:version-url
+V 40
+/svn/adlbm/!svn/ver/374/trunk/configargs
+END
+rmbmac.cfg
+K 25
+svn:wc:ra_dav:version-url
+V 51
+/svn/adlbm/!svn/ver/374/trunk/configargs/rmbmac.cfg
+END
+bgp.cfg
+K 25
+svn:wc:ra_dav:version-url
+V 48
+/svn/adlbm/!svn/ver/321/trunk/configargs/bgp.cfg
+END
+sicortex_no__.cfg
+K 25
+svn:wc:ra_dav:version-url
+V 58
+/svn/adlbm/!svn/ver/321/trunk/configargs/sicortex_no__.cfg
+END
+sicortex.cfg
+K 25
+svn:wc:ra_dav:version-url
+V 53
+/svn/adlbm/!svn/ver/321/trunk/configargs/sicortex.cfg
+END
