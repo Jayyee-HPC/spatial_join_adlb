@@ -1,4 +1,5 @@
 #define USE_UNSTABLE_GEOS_CPP_API
+#include "mpi.h"
 #include "adlb.h"
 
 #include <stdio.h>
@@ -29,14 +30,35 @@ void server_func(int my_world_rank)
 	printf("Server %d; Time %f.\n", my_world_rank, time_t2-time_t1);
 }
 
-void work_func(int my_world_rank, string file_path_1, string file_path_2, MPI_COMM worker_comm)
+void work_func(int my_world_rank, string file_path_1, string file_path_2, MPI_Comm worker_comm)
 {
 	if(worker_comm != MPI_COMM_NULL) 
 	{
-		mpiReader.ReadAll(filepath1, &geoms);
-		mpiReader.ReadGeomsSplit(filepath2, BLOCK_SIZE, &wkts, worker_comm);
+		double tv_begin = mpi_wtime();
+		list<Geometry*> list_geoms_1, list_geoms_2;
+		list<string> *list_strs;
+		MpiReadStruct mpiReader;
+		mpiReader.ReadAll(filepath1, &list_geoms_1);
+		mpiReader.ReadGeomsSplit(filepath2, BLOCK_SIZE, &list_strs, worker_comm);
+		mpiReader.ReadGeomsFromStr(list_strs, &list_geoms_2);
 		
-		spdlog::info("Rank {} {}", my_world_rank, geoms.size());
+		spdlog::info("Rank {}, {} : {}", my_world_rank, list_geoms_1.size(), list_geoms_2->size());
+		
+		double tv_end_reading = mpi_wtime();
+
+		geos::index::strtree::strtree index;
+
+		for (list<geometry*>::iterator itr = list_geoms_1.begin() ; itr != list_geoms_1.end(); ++itr) {
+			geometry* p = *itr;
+			index.insert( p->getenvelopeinternal(), p );
+		}
+
+		double tv_end_indexing = mpi_wtime();
+		
+		for (list<geometry*>::iterator itr = list_geoms_2.begin() ; itr != list_geoms_2.end(); ++itr)
+		{
+			
+		}
 	}
 	else
 	{
@@ -104,20 +126,6 @@ int main(int argc, char *argv[])
         
 	MPI_Comm worker_comm;
 	MPI_Comm_create_group(MPI_COMM_WORLD, worker_group, 0, &worker_comm);
-  
-	list<Geometry*> geoms;
-	list<string> *wkts;
-
-	if(worker_comm != MPI_COMM_NULL) {
-		mpiReader.ReadAll(filepath1, &geoms);
-			
-		mpiReader.ReadGeomsSplit(filepath2, BLOCK_SIZE, &wkts, worker_comm);
-		
-		printf("Rank %d %ld \n", my_world_rank, geoms.size()); 
-			 
-	}else{
-			//printf("Rank %d has an invalid worker_comm\n", my_world_rank);
-	}
 	
 	int rc = ADLB_Init(num_servers,use_debug_server,1,num_types,types,
     &am_server,&am_debug_server,&app_comm);
@@ -158,7 +166,7 @@ int main(int argc, char *argv[])
   }
 	
 	delete wkts;
-	wkts = null;
+	wkts = nullptr;
 	
 	double endread_tv;
 	endread_tv = mpi_wtime();
