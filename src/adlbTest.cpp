@@ -7,6 +7,7 @@
 #include<map>
 #include<list>
 
+#include <geos/geom/Geometry.h>
 #include <geos/io/WKTReader.h>
 #include <geos/geom/prep/PreparedGeometryFactory.h>
 #include <geos/geom/prep/PreparedGeometry.h>
@@ -18,8 +19,11 @@
 #include "./spdlog/spdlog.h"
 #include "./spdlog/cfg/env.h" // support for loading levels from the environment variable#include "MpiReadStruct.h"
 
+#define WORK 1000
 //mpicc -o prog nq.c libadlb.a libmpigis.a -lm
 //mpirun -np 2 ./prog 
+using namespace std;
+using namespace geos::geom;
 void server_func(int my_world_rank)
 {
 	double time_t1, time_t2;
@@ -34,30 +38,79 @@ void work_func(int my_world_rank, string file_path_1, string file_path_2, MPI_Co
 {
 	if(worker_comm != MPI_COMM_NULL) 
 	{
-		double tv_begin = mpi_wtime();
+		double tv_begin = MPI_Wtime();
 		list<Geometry*> list_geoms_1, list_geoms_2;
 		list<string> *list_strs;
 		MpiReadStruct mpiReader;
-		mpiReader.ReadAll(filepath1, &list_geoms_1);
-		mpiReader.ReadGeomsSplit(filepath2, BLOCK_SIZE, &list_strs, worker_comm);
+		mpiReader.ReadAll(file_path_1, &list_geoms_1);
+		mpiReader.ReadGeomsSplit(file_path_2, BLOCK_SIZE, &list_strs, worker_comm);
 		mpiReader.ReadGeomsFromStr(list_strs, &list_geoms_2);
 		
-		spdlog::info("Rank {}, {} : {}", my_world_rank, list_geoms_1.size(), list_geoms_2->size());
+		spdlog::info("Rank {}, {} : {}", my_world_rank, list_geoms_1.size(), list_geoms_2.size());
 		
-		double tv_end_reading = mpi_wtime();
+		double tv_end_reading = MPI_Wtime();
 
-		geos::index::strtree::strtree index;
+		geos::index::strtree::STRtree index;
 
-		for (list<geometry*>::iterator itr = list_geoms_1.begin() ; itr != list_geoms_1.end(); ++itr) {
-			geometry* p = *itr;
-			index.insert( p->getenvelopeinternal(), p );
+		for (list<Geometry*>::iterator itr = list_geoms_1.begin() ; itr != list_geoms_1.end(); ++itr) {
+			Geometry* p = *itr;
+			index.insert( p->getEnvelopeInternal(), p );
 		}
 
-		double tv_end_indexing = mpi_wtime();
+		double tv_end_indexing = MPI_Wtime();
 		
-		for (list<geometry*>::iterator itr = list_geoms_2.begin() ; itr != list_geoms_2.end(); ++itr)
+		for (list<Geometry*>::iterator itr = list_geoms_2.begin() ; itr != list_geoms_2.end(); ++itr)
 		{
-			
+			std::vector<void *> query_results;
+			Geometry *curr_geom = *itr;
+        	index.query(curr_geom->getEnvelopeInternal(), query_results);
+
+			if (!query_results.empty())
+			{
+				int num_geoms = 1 + query_results.size();
+				int num_points = curr_geom->getNumPoints();
+
+				for (int i = 0; i < query_results.size(); ++i)
+				{
+					num_points += ((Geometry*)(query_results[i]))->getNumPoints();
+				}
+
+				// one extra double to record how many geometries in this buffer
+				double *temp_buf;
+				temp_buf = (double*)malloc((1 + num_geoms + 2 * num_points) * sizeof(double));
+
+				temp_buf[0]	= (double)(1 + num_geoms);
+
+				int curr_pos = 1 + num_geoms;
+
+				// write the first geometry from dataset 1
+				temp_buf[1] = (double)(curr_geom->getNumPoints());
+				
+				std::unique_ptr< CoordinateSequence > temp_coords = curr_geom->getCoordinates();
+
+				for (int i = 0; i < temp_coords.get()->size(); ++i)
+				{
+					temp_buf[curr_pos + i * 2] = temp_coords.get()->getAt(i).x;
+					temp_buf[curr_pos + i * 2 + 1] = temp_coords.get()->getAt(i).y;
+				}
+
+				curr_pos += (2 * curr_geom->getNumPoints());
+
+				for (int i = 0; i < query_results.size(); ++i)
+				{
+					std::unique_ptr< CoordinateSequence > temp_coords = ((Geometry*)query_results[i])->getCoordinates();
+					temp_buf[i+2] = temp_coords.get()->size();
+
+					for (int j = 0; j < temp_coords.get()->size(); ++j)
+					{
+						temp_buf[curr_pos + j * 2] = temp_coords.get()->getAt(j).x;
+						temp_buf[curr_pos + j * 2 + 1] = temp_coords.get()->getAt(j).y;
+					}
+					curr_pos += (2 * temp_coords.get()->size()); 
+				}
+
+				ADLB_Put(temp_buf, (num_geoms + 2 * num_points) * sizeof(double), -1, my_world_rank, WORK, 1);
+			}	
 		}
 	}
 	else
@@ -157,27 +210,9 @@ int main(int argc, char *argv[])
 		if (use_debug_server)
 			num_workers--;
 
-		cout<<my_world_rank<<" lines  " <<wkts->size() << endl;
+		work_func(my_world_rank, file_path_1, file_path_2, worker_comm);
 	
-  for(list<string>::iterator itr = wkts->begin(); itr != wkts->end(); ++itr) {
-			char *w = &(*itr)[0u];
 
-			rc = adlb_put(w, itr->size(), -1, my_world_rank, work, 1);
-  }
-	
-	delete wkts;
-	wkts = nullptr;
-	
-	double endread_tv;
-	endread_tv = mpi_wtime();
-
-	geos::index::strtree::strtree index;
-
-	for (list<geometry*>::iterator it = geoms.begin() ; it != geoms.end(); it++) {
-		geometry* p = *it;
-		index.insert( p->getenvelopeinternal(), p );
-  }
-	
 	double endbuildindex_tv;
 	endbuildindex_tv = mpi_wtime();
 
